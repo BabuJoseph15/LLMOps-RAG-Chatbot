@@ -1,5 +1,14 @@
+import time
+
 from fastapi import FastAPI
+from fastapi.responses import Response
 from pydantic import BaseModel
+
+from prometheus_client import (
+    Counter,
+    Histogram,
+    generate_latest
+)
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -8,8 +17,18 @@ from langchain_ollama import ChatOllama
 
 app = FastAPI(
     title="Enterprise RAG Chatbot",
-    description="LLMOps RAG Chatbot powered by ChromaDB and Llama3",
     version="1.0.0"
+)
+
+
+rag_requests_total = Counter(
+    "rag_requests_total",
+    "Total chatbot requests"
+)
+
+rag_response_time_seconds = Histogram(
+    "rag_response_time_seconds",
+    "RAG response latency"
 )
 
 
@@ -19,7 +38,7 @@ embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-print("Loading vector database...")
+print("Loading ChromaDB...")
 
 db = Chroma(
     persist_directory="chroma_db",
@@ -29,8 +48,7 @@ db = Chroma(
 print("Loading Llama3...")
 
 llm = ChatOllama(
-    model="llama3",
-    temperature=0
+    model="llama3"
 )
 
 
@@ -57,36 +75,40 @@ def health():
     }
 
 
+@app.get("/metrics")
+def metrics():
+
+    return Response(
+        generate_latest(),
+        media_type="text/plain"
+    )
+
+
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
 
-    question = request.question
+    start_time = time.time()
+
+    rag_requests_total.inc()
 
     docs = db.similarity_search(
-        question,
+        request.question,
         k=3
     )
 
-    sources = []
-
-    context_parts = []
-
-    for doc in docs:
-
-        source = doc.metadata.get(
-            "source",
-            "Unknown"
-        )
-
-        if source not in sources:
-            sources.append(source)
-
-        context_parts.append(
-            doc.page_content
-        )
-
     context = "\n\n".join(
-        context_parts
+        doc.page_content
+        for doc in docs
+    )
+
+    sources = list(
+        {
+            doc.metadata.get(
+                "source",
+                "Unknown"
+            )
+            for doc in docs
+        }
     )
 
     prompt = f"""
@@ -95,27 +117,23 @@ Docker and DevOps assistant.
 
 Answer ONLY from the provided context.
 
-If the answer cannot be found,
-respond with:
-
-"I could not find this information
-in the indexed documents."
-
 Context:
 {context}
 
 Question:
-{question}
-
-Answer:
+{request.question}
 """
 
-    response = llm.invoke(
+    answer = llm.invoke(
         prompt
     )
 
+    rag_response_time_seconds.observe(
+        time.time() - start_time
+    )
+
     return {
-        "question": question,
-        "answer": response.content,
+        "question": request.question,
+        "answer": answer.content,
         "sources": sources
     }

@@ -1,6 +1,11 @@
 fastapi
 uvicorn
 
+pytest
+httpx
+
+prometheus-client
+
 langchain
 langchain-community
 langchain-text-splitters
@@ -12,5 +17,3 @@ chromadb
 sentence-transformers
 
 pypdf
-
-pytest
