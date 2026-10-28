@@ -1,9 +1,9 @@
+import os
 import time
 
 from fastapi import FastAPI
 from fastapi.responses import Response
 from pydantic import BaseModel
-from langchain_chroma import Chroma
 
 from prometheus_client import (
     Counter,
@@ -16,15 +16,23 @@ from langchain_community.vectorstores import Chroma
 from langchain_ollama import ChatOllama
 
 
+# --------------------------------------------------
+# FastAPI App
+# --------------------------------------------------
+
 app = FastAPI(
     title="Enterprise RAG Chatbot",
+    description="RAG Chatbot powered by ChromaDB and Ollama",
     version="1.0.0"
 )
 
+# --------------------------------------------------
+# Metrics
+# --------------------------------------------------
 
 rag_requests_total = Counter(
     "rag_requests_total",
-    "Total chatbot requests"
+    "Total RAG requests"
 )
 
 rag_response_time_seconds = Histogram(
@@ -32,6 +40,22 @@ rag_response_time_seconds = Histogram(
     "RAG response latency"
 )
 
+# --------------------------------------------------
+# Ollama Configuration
+# --------------------------------------------------
+
+OLLAMA_BASE_URL = os.getenv(
+    "OLLAMA_BASE_URL",
+    "http://localhost:11434"
+)
+
+print(
+    f"Using Ollama URL: {OLLAMA_BASE_URL}"
+)
+
+# --------------------------------------------------
+# Embeddings
+# --------------------------------------------------
 
 print("Loading embedding model...")
 
@@ -39,23 +63,39 @@ embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-print("Loading ChromaDB...")
+# --------------------------------------------------
+# ChromaDB
+# --------------------------------------------------
+
+print("Loading vector database...")
 
 db = Chroma(
     persist_directory="chroma_db",
     embedding_function=embeddings
 )
 
+# --------------------------------------------------
+# Ollama LLM
+# --------------------------------------------------
+
 print("Loading Llama3...")
 
 llm = ChatOllama(
-    model="llama3"
+    model="llama3",
+    base_url=OLLAMA_BASE_URL,
+    temperature=0
 )
 
+# --------------------------------------------------
+# Request Model
+# --------------------------------------------------
 
 class QuestionRequest(BaseModel):
     question: str
 
+# --------------------------------------------------
+# Root Endpoint
+# --------------------------------------------------
 
 @app.get("/")
 def root():
@@ -65,6 +105,9 @@ def root():
         "docs": "/docs"
     }
 
+# --------------------------------------------------
+# Health Check
+# --------------------------------------------------
 
 @app.get("/health")
 def health():
@@ -75,15 +118,21 @@ def health():
         "llm": "llama3"
     }
 
+# --------------------------------------------------
+# Prometheus Metrics
+# --------------------------------------------------
 
 @app.get("/metrics")
 def metrics():
 
     return Response(
-        generate_latest(),
+        content=generate_latest(),
         media_type="text/plain"
     )
 
+# --------------------------------------------------
+# Ask Endpoint
+# --------------------------------------------------
 
 @app.post("/ask")
 def ask_question(request: QuestionRequest):
@@ -92,49 +141,79 @@ def ask_question(request: QuestionRequest):
 
     rag_requests_total.inc()
 
-    docs = db.similarity_search(
-        request.question,
-        k=3
-    )
+    try:
 
-    context = "\n\n".join(
-        doc.page_content
-        for doc in docs
-    )
+        docs = db.similarity_search(
+            request.question,
+            k=3
+        )
 
-    sources = list(
-        {
-            doc.metadata.get(
-                "source",
-                "Unknown"
-            )
+        context = "\n\n".join(
+            doc.page_content
             for doc in docs
-        }
-    )
+        )
 
-    prompt = f"""
+        sources = list(
+            {
+                doc.metadata.get(
+                    "source",
+                    "Unknown"
+                )
+                for doc in docs
+            }
+        )
+
+        prompt = f"""
 You are an expert AWS, Kubernetes,
 Docker and DevOps assistant.
 
-Answer ONLY from the provided context.
+Use ONLY the context below.
+
+If information is unavailable,
+say:
+
+'I could not find this information in the indexed documents.'
 
 Context:
 {context}
 
 Question:
 {request.question}
+
+Answer:
 """
 
-    answer = llm.invoke(
-        prompt
-    )
+        response = llm.invoke(
+            prompt
+        )
 
-    rag_response_time_seconds.observe(
-        time.time() - start_time
-    )
+        rag_response_time_seconds.observe(
+            time.time() - start_time
+        )
 
-    return {
-        "question": request.question,
-        "answer": answer.content,
-        "sources": sources
-    }
+        return {
+            "question": request.question,
+            "answer": response.content,
+            "sources": sources
+        }
+
+    except Exception as e:
+
+        return {
+            "question": request.question,
+            "error": str(e)
+        }
+
+# --------------------------------------------------
+# Local Execution
+# --------------------------------------------------
+
+if __name__ == "__main__":
+
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000
+    )
