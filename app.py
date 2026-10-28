@@ -3,6 +3,7 @@ import time
 from fastapi import FastAPI
 from fastapi.responses import Response
 from pydantic import BaseModel
+from langchain_chroma import Chroma
 
 from prometheus_client import (
     Counter,
