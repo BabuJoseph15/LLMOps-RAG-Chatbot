@@ -15,7 +15,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'master',
-                url: 'https://github.com/YOUR_GITHUB_USERNAME/LLMOps-RAG-Chatbot.git'
+                url: 'https://github.com/BabuJoseph15/LLMOps-RAG-Chatbot.git'
             }
         }
 
