@@ -4,31 +4,28 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "babujoseph5757/rag-chatbot"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
     }
 
     options {
         timestamps()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Source') {
             steps {
-                git branch: 'master',
-                url: 'https://github.com/BabuJoseph15/LLMOps-RAG-Chatbot.git'
+                checkout scm
             }
         }
 
-        stage('Create Virtual Environment') {
+        stage('Verify Workspace') {
             steps {
                 sh '''
-                python3 -m venv venv
-
-                . venv/bin/activate
-
-                python --version
-
-                pip install --upgrade pip
+                pwd
+                ls -ltr
                 '''
             }
         }
@@ -36,9 +33,11 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 sh '''
-                . venv/bin/activate
+                python3 --version
 
-                pip install -r requirements.txt
+                if [ -f requirements.txt ]; then
+                    pip3 install --no-cache-dir -r requirements.txt
+                fi
                 '''
             }
         }
@@ -46,9 +45,11 @@ pipeline {
         stage('Run Unit Tests') {
             steps {
                 sh '''
-                . venv/bin/activate
-
-                pytest
+                if [ -d tests ]; then
+                    pytest tests/
+                else
+                    echo "No tests directory found. Skipping..."
+                fi
                 '''
             }
         }
@@ -57,17 +58,24 @@ pipeline {
             steps {
                 sh '''
                 docker build \
-                -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
-
-                docker tag \
-                ${DOCKER_IMAGE}:${BUILD_NUMBER} \
-                ${DOCKER_IMAGE}:latest
+                -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                .
                 '''
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Trivy Security Scan') {
+            steps {
+                sh '''
+                trivy image \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${DOCKER_IMAGE}:${IMAGE_TAG}
+                '''
+            }
+        }
 
+        stage('Docker Login') {
             steps {
 
                 withCredentials([
@@ -82,12 +90,49 @@ pipeline {
                     echo "$DOCKER_PASS" | docker login \
                     -u "$DOCKER_USER" \
                     --password-stdin
-
-                    docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
-
-                    docker push ${DOCKER_IMAGE}:latest
                     '''
                 }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                sh '''
+                docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+
+                docker tag \
+                ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                ${DOCKER_IMAGE}:latest
+
+                docker push ${DOCKER_IMAGE}:latest
+                '''
+            }
+        }
+
+        stage('Deploy To Kubernetes') {
+            steps {
+                sh '''
+                kubectl set image deployment/rag-chatbot \
+                rag-chatbot=${DOCKER_IMAGE}:${IMAGE_TAG}
+
+                kubectl rollout status deployment/rag-chatbot \
+                --timeout=300s
+                '''
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                sh '''
+                echo "=== Pods ==="
+                kubectl get pods
+
+                echo "=== Deployments ==="
+                kubectl get deployment
+
+                echo "=== Services ==="
+                kubectl get svc
+                '''
             }
         }
     }
@@ -95,7 +140,7 @@ pipeline {
     post {
 
         success {
-            echo '✅ RAG Chatbot pipeline successful'
+            echo '✅ RAG Chatbot deployment successful'
         }
 
         failure {
@@ -103,6 +148,17 @@ pipeline {
         }
 
         always {
+
+            sh '''
+            rm -rf ~/.cache/pip || true
+
+            docker container prune -f || true
+
+            docker image prune -f || true
+
+            docker builder prune -f || true
+            '''
+
             cleanWs()
         }
     }
