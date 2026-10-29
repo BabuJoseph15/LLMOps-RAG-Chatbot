@@ -3,26 +3,42 @@ pipeline {
     agent any
 
     environment {
+
         DOCKER_IMAGE = "babujoseph5757/rag-chatbot"
         IMAGE_TAG = "${BUILD_NUMBER}"
+
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
+
+        TRIVY_TEMP_DIR = "/var/lib/jenkins/trivy-temp"
+
+        PATH = "/var/lib/jenkins/.local/bin:${env.PATH}"
     }
 
     options {
+
         timestamps()
-        buildDiscarder(logRotator(numToKeepStr: '10'))
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '10'
+            )
+        )
     }
 
     stages {
 
         stage('Checkout Source') {
+
             steps {
+
                 checkout scm
             }
         }
 
         stage('Verify Workspace') {
+
             steps {
+
                 sh '''
                 pwd
                 ls -ltr
@@ -31,7 +47,9 @@ pipeline {
         }
 
         stage('Install Dependencies') {
+
             steps {
+
                 sh '''
                 python3 --version
 
@@ -46,7 +64,9 @@ pipeline {
         }
 
         stage('Verify Pytest') {
+
             steps {
+
                 sh '''
                 python3 -m pip show pytest || true
                 '''
@@ -54,19 +74,21 @@ pipeline {
         }
 
         stage('Run Unit Tests') {
+
             steps {
 
                 sh '''
                 if [ -d tests ]; then
                     python3 -m pytest tests/
                 else
-                    echo "No tests directory found. Skipping tests."
+                    echo "No tests directory found. Skipping..."
                 fi
                 '''
             }
         }
 
         stage('Build Docker Image') {
+
             steps {
 
                 sh '''
@@ -77,10 +99,16 @@ pipeline {
         }
 
         stage('Trivy Security Scan') {
+
             steps {
 
                 sh '''
+                mkdir -p ${TRIVY_TEMP_DIR}
+
+                export TMPDIR=${TRIVY_TEMP_DIR}
+
                 trivy image \
+                --skip-version-check \
                 --severity HIGH,CRITICAL \
                 --exit-code 0 \
                 ${DOCKER_IMAGE}:${IMAGE_TAG}
@@ -173,6 +201,8 @@ pipeline {
 
             sh '''
             rm -rf ~/.cache/pip || true
+
+            rm -rf ${TRIVY_TEMP_DIR}/* || true
 
             docker container prune -f || true
 
