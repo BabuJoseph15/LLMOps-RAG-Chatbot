@@ -1,10 +1,17 @@
+.git
+.gitignore
+
 venv/
 __pycache__/
-.pytest_cache/
+*.pyc
+
+chroma_db/
 .git/
 
-*.pyc
-*.log
+data/
 
-.idea/
-.vscode/
+mlruns/
+
+tests/
+
+*.log
