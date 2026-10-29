@@ -35,20 +35,32 @@ pipeline {
                 sh '''
                 python3 --version
 
-                if [ -f requirements.txt ]; then
-                    pip3 install --no-cache-dir -r requirements.txt
-                fi
+                python3 -m pip install --upgrade pip
+
+                python3 -m pip install \
+                --user \
+                --no-cache-dir \
+                -r requirements.txt
+                '''
+            }
+        }
+
+        stage('Verify Pytest') {
+            steps {
+                sh '''
+                python3 -m pip show pytest || true
                 '''
             }
         }
 
         stage('Run Unit Tests') {
             steps {
+
                 sh '''
                 if [ -d tests ]; then
-                    pytest tests/
+                    python3 -m pytest tests/
                 else
-                    echo "No tests directory found. Skipping..."
+                    echo "No tests directory found. Skipping tests."
                 fi
                 '''
             }
@@ -56,16 +68,17 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
+
                 sh '''
                 docker build \
-                -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
-                .
+                -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
                 '''
             }
         }
 
         stage('Trivy Security Scan') {
             steps {
+
                 sh '''
                 trivy image \
                 --severity HIGH,CRITICAL \
@@ -76,6 +89,7 @@ pipeline {
         }
 
         stage('Docker Login') {
+
             steps {
 
                 withCredentials([
@@ -96,7 +110,9 @@ pipeline {
         }
 
         stage('Push Docker Image') {
+
             steps {
+
                 sh '''
                 docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
 
@@ -110,7 +126,9 @@ pipeline {
         }
 
         stage('Deploy To Kubernetes') {
+
             steps {
+
                 sh '''
                 kubectl set image deployment/rag-chatbot \
                 rag-chatbot=${DOCKER_IMAGE}:${IMAGE_TAG}
@@ -122,15 +140,17 @@ pipeline {
         }
 
         stage('Verify Deployment') {
+
             steps {
+
                 sh '''
-                echo "=== Pods ==="
+                echo "===== Pods ====="
                 kubectl get pods
 
-                echo "=== Deployments ==="
+                echo "===== Deployments ====="
                 kubectl get deployment
 
-                echo "=== Services ==="
+                echo "===== Services ====="
                 kubectl get svc
                 '''
             }
@@ -140,10 +160,12 @@ pipeline {
     post {
 
         success {
+
             echo '✅ RAG Chatbot deployment successful'
         }
 
         failure {
+
             echo '❌ Pipeline failed'
         }
 
