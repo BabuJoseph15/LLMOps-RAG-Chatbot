@@ -31,6 +31,8 @@ pipeline {
 
             steps {
 
+                echo 'Checking out source code...'
+
                 checkout scm
             }
         }
@@ -81,7 +83,7 @@ pipeline {
                 if [ -d tests ]; then
                     python3 -m pytest tests/
                 else
-                    echo "No tests directory found. Skipping..."
+                    echo "No tests directory found. Skipping tests."
                 fi
                 '''
             }
@@ -91,9 +93,12 @@ pipeline {
 
             steps {
 
+                echo 'Building Docker image...'
+
                 sh '''
                 docker build \
-                -t ${DOCKER_IMAGE}:${IMAGE_TAG} .
+                -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                .
                 '''
             }
         }
@@ -101,6 +106,8 @@ pipeline {
         stage('Trivy Security Scan') {
 
             steps {
+
+                echo 'Running Trivy Scan...'
 
                 sh '''
                 mkdir -p ${TRIVY_TEMP_DIR}
@@ -141,6 +148,8 @@ pipeline {
 
             steps {
 
+                echo 'Pushing Docker image...'
+
                 sh '''
                 docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
 
@@ -157,6 +166,8 @@ pipeline {
 
             steps {
 
+                echo 'Deploying to Kubernetes...'
+
                 sh '''
                 kubectl set image deployment/rag-chatbot \
                 rag-chatbot=${DOCKER_IMAGE}:${IMAGE_TAG}
@@ -172,14 +183,17 @@ pipeline {
             steps {
 
                 sh '''
+                echo "===== Deployment ====="
+                kubectl get deployment
+
                 echo "===== Pods ====="
                 kubectl get pods
 
-                echo "===== Deployments ====="
-                kubectl get deployment
-
                 echo "===== Services ====="
                 kubectl get svc
+
+                echo "===== Current Image ====="
+                kubectl describe deployment rag-chatbot | grep Image
                 '''
             }
         }
