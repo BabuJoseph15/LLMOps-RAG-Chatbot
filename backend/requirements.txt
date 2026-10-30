@@ -19,3 +19,5 @@ sentence-transformers
 pypdf
 langchain-chroma
 
+streamlit
+requests

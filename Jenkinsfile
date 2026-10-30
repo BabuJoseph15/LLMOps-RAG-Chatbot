@@ -4,7 +4,9 @@ pipeline {
 
     environment {
 
-        DOCKER_IMAGE = "babujoseph5757/rag-chatbot"
+        BACKEND_IMAGE = "babujoseph5757/rag-chatbot"
+        FRONTEND_IMAGE = "babujoseph5757/rag-chatbot-frontend"
+
         IMAGE_TAG = "${BUILD_NUMBER}"
 
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
@@ -31,7 +33,7 @@ pipeline {
 
             steps {
 
-                echo 'Checking out source code...'
+                echo "Checking out source code..."
 
                 checkout scm
             }
@@ -83,31 +85,39 @@ pipeline {
                 if [ -d tests ]; then
                     python3 -m pytest tests/
                 else
-                    echo "No tests directory found. Skipping tests."
+                    echo "No tests found. Skipping..."
                 fi
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Backend Image') {
 
             steps {
 
-                echo 'Building Docker image...'
-
                 sh '''
                 docker build \
-                -t ${DOCKER_IMAGE}:${IMAGE_TAG} \
+                -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
                 .
                 '''
             }
         }
 
-        stage('Trivy Security Scan') {
+        stage('Build Frontend Image') {
 
             steps {
 
-                echo 'Running Trivy Scan...'
+                sh '''
+                docker build \
+                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                ./frontend
+                '''
+            }
+        }
+
+        stage('Trivy Scan Backend') {
+
+            steps {
 
                 sh '''
                 mkdir -p ${TRIVY_TEMP_DIR}
@@ -118,7 +128,23 @@ pipeline {
                 --skip-version-check \
                 --severity HIGH,CRITICAL \
                 --exit-code 0 \
-                ${DOCKER_IMAGE}:${IMAGE_TAG}
+                ${BACKEND_IMAGE}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Trivy Scan Frontend') {
+
+            steps {
+
+                sh '''
+                export TMPDIR=${TRIVY_TEMP_DIR}
+
+                trivy image \
+                --skip-version-check \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${FRONTEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -144,35 +170,61 @@ pipeline {
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Push Backend Image') {
 
             steps {
 
-                echo 'Pushing Docker image...'
-
                 sh '''
-                docker push ${DOCKER_IMAGE}:${IMAGE_TAG}
+                docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
                 docker tag \
-                ${DOCKER_IMAGE}:${IMAGE_TAG} \
-                ${DOCKER_IMAGE}:latest
+                ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                ${BACKEND_IMAGE}:latest
 
-                docker push ${DOCKER_IMAGE}:latest
+                docker push ${BACKEND_IMAGE}:latest
                 '''
             }
         }
 
-        stage('Deploy To Kubernetes') {
+        stage('Push Frontend Image') {
 
             steps {
 
-                echo 'Deploying to Kubernetes...'
+                sh '''
+                docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                docker tag \
+                ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                ${FRONTEND_IMAGE}:latest
+
+                docker push ${FRONTEND_IMAGE}:latest
+                '''
+            }
+        }
+
+        stage('Deploy Backend') {
+
+            steps {
 
                 sh '''
                 kubectl set image deployment/rag-chatbot \
-                rag-chatbot=${DOCKER_IMAGE}:${IMAGE_TAG}
+                rag-chatbot=${BACKEND_IMAGE}:${IMAGE_TAG}
 
                 kubectl rollout status deployment/rag-chatbot \
+                --timeout=300s
+                '''
+            }
+        }
+
+        stage('Deploy Frontend') {
+
+            steps {
+
+                sh '''
+                kubectl set image deployment/rag-chatbot-frontend \
+                rag-chatbot-frontend=${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+                kubectl rollout status deployment/rag-chatbot-frontend \
                 --timeout=300s
                 '''
             }
@@ -183,7 +235,7 @@ pipeline {
             steps {
 
                 sh '''
-                echo "===== Deployment ====="
+                echo "===== Deployments ====="
                 kubectl get deployment
 
                 echo "===== Pods ====="
@@ -192,8 +244,11 @@ pipeline {
                 echo "===== Services ====="
                 kubectl get svc
 
-                echo "===== Current Image ====="
+                echo "===== Backend Image ====="
                 kubectl describe deployment rag-chatbot | grep Image
+
+                echo "===== Frontend Image ====="
+                kubectl describe deployment rag-chatbot-frontend | grep Image
                 '''
             }
         }
@@ -203,7 +258,7 @@ pipeline {
 
         success {
 
-            echo '✅ RAG Chatbot deployment successful'
+            echo '✅ Backend and Frontend deployed successfully'
         }
 
         failure {
