@@ -12,7 +12,7 @@ from prometheus_client import (
 import time
 import logging
 
-from rag_pipeline import get_answer
+from backend.rag_pipeline import get_answer
 
 
 # ====================================
