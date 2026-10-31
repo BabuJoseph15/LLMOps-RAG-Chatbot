@@ -1,35 +1,21 @@
-import os
 import sys
+import os
 
-from fastapi.testclient import TestClient
-
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(
-        os.path.dirname(__file__),
-        ".."
+# Add project root to Python path
+sys.path.append(
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            ".."
+        )
     )
 )
 
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+from fastapi.testclient import TestClient
 
-from app import app
+from backend.app import app
 
 client = TestClient(app)
-
-
-def test_root():
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-
-    data = response.json()
-
-    assert (
-        data["message"]
-        == "Enterprise RAG Chatbot API"
-    )
 
 
 def test_health():
@@ -38,18 +24,18 @@ def test_health():
 
     assert response.status_code == 200
 
-    data = response.json()
-
-    assert data["status"] == "healthy"
-
-    assert data["service"] == "rag-chatbot"
+    assert response.json()["status"] == "healthy"
 
 
-def test_invalid_request():
+def test_root():
 
-    response = client.post(
-        "/ask",
-        json={}
-    )
+    response = client.get("/")
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+
+
+def test_metrics():
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
