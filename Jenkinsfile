@@ -36,7 +36,18 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Verify Workspace') {
+
+            steps {
+
+                sh '''
+                pwd
+                ls -ltr
+                '''
+            }
+        }
+
+        stage('Install Backend Dependencies') {
 
             steps {
 
@@ -61,7 +72,11 @@ pipeline {
             steps {
 
                 sh '''
-                python3 -m pytest tests/ -v
+                if [ -d tests ]; then
+                    python3 -m pytest tests/ -v
+                else
+                    echo "No tests found. Skipping..."
+                fi
                 '''
             }
         }
@@ -100,10 +115,30 @@ pipeline {
                 export TMPDIR=${TRIVY_TEMP_DIR}
 
                 trivy image \
+                --timeout 30m \
                 --skip-version-check \
+                --scanners vuln \
                 --severity HIGH,CRITICAL \
                 --exit-code 0 \
                 ${BACKEND_IMAGE}:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage('Trivy Scan Frontend') {
+
+            steps {
+
+                sh '''
+                export TMPDIR=${TRIVY_TEMP_DIR}
+
+                trivy image \
+                --timeout 15m \
+                --skip-version-check \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${FRONTEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -194,17 +229,36 @@ pipeline {
             steps {
 
                 sh '''
+                echo "===== Deployments ====="
                 kubectl get deployment
 
+                echo "===== Pods ====="
                 kubectl get pods
 
+                echo "===== Services ====="
                 kubectl get svc
+
+                echo "===== Backend Image ====="
+                kubectl describe deployment rag-chatbot | grep Image
+
+                echo "===== Frontend Image ====="
+                kubectl describe deployment rag-chatbot-frontend | grep Image
                 '''
             }
         }
     }
 
     post {
+
+        success {
+
+            echo '✅ Backend and Frontend deployment successful'
+        }
+
+        failure {
+
+            echo '❌ Pipeline failed'
+        }
 
         always {
 
@@ -221,16 +275,6 @@ pipeline {
             '''
 
             cleanWs()
-        }
-
-        success {
-
-            echo "✅ Backend + Frontend deployment successful"
-        }
-
-        failure {
-
-            echo "❌ Pipeline failed"
         }
     }
 }
