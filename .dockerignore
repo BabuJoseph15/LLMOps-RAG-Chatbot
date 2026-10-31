@@ -3,15 +3,11 @@
 
 venv/
 __pycache__/
-*.pyc
 
 chroma_db/
-.git/
-
-data/
-
-mlruns/
-
-tests/
 
 *.log
+
+.pytest_cache
+
+tests/__pycache__

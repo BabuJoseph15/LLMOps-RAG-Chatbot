@@ -4,7 +4,7 @@ pipeline {
 
     environment {
 
-        BACKEND_IMAGE = "babujoseph5757/rag-chatbot"
+        BACKEND_IMAGE  = "babujoseph5757/rag-chatbot"
         FRONTEND_IMAGE = "babujoseph5757/rag-chatbot-frontend"
 
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -50,30 +50,23 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Install Backend Dependencies') {
 
             steps {
 
-                sh '''
-                python3 --version
+                dir('backend') {
 
-                python3 -m pip install --upgrade pip
+                    sh '''
+                    python3 --version
 
-                python3 -m pip install \
-                --user \
-                --no-cache-dir \
-                -r requirements.txt
-                '''
-            }
-        }
+                    python3 -m pip install --upgrade pip
 
-        stage('Verify Pytest') {
-
-            steps {
-
-                sh '''
-                python3 -m pip show pytest || true
-                '''
+                    python3 -m pip install \
+                    --user \
+                    --no-cache-dir \
+                    -r requirements.txt
+                    '''
+                }
             }
         }
 
@@ -98,7 +91,7 @@ pipeline {
                 sh '''
                 docker build \
                 -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                .
+                ./backend
                 '''
             }
         }
