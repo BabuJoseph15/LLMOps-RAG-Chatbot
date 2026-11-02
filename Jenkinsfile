@@ -34,9 +34,6 @@ pipeline {
         stage('Checkout Source') {
 
             steps {
-
-                echo "Checking out source code..."
-
                 checkout scm
             }
         }
@@ -64,9 +61,9 @@ pipeline {
                     python3 -m pip install --upgrade pip
 
                     python3 -m pip install \
-                        --user \
-                        --no-cache-dir \
-                        -r requirements.txt
+                    --user \
+                    --no-cache-dir \
+                    -r requirements.txt
                     '''
                 }
             }
@@ -88,8 +85,8 @@ pipeline {
 
                 sh '''
                 docker build \
-                  -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                  ./backend
+                -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                ./backend
                 '''
             }
         }
@@ -100,8 +97,8 @@ pipeline {
 
                 sh '''
                 docker build \
-                  -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                  ./frontend
+                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                ./frontend
                 '''
             }
         }
@@ -116,12 +113,12 @@ pipeline {
                 export TMPDIR=${TRIVY_TEMP_DIR}
 
                 trivy image \
-                  --timeout 30m \
-                  --skip-version-check \
-                  --scanners vuln \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  ${BACKEND_IMAGE}:${IMAGE_TAG}
+                --timeout 30m \
+                --skip-version-check \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${BACKEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -134,12 +131,12 @@ pipeline {
                 export TMPDIR=${TRIVY_TEMP_DIR}
 
                 trivy image \
-                  --timeout 15m \
-                  --skip-version-check \
-                  --scanners vuln \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                --timeout 15m \
+                --skip-version-check \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --exit-code 0 \
+                ${FRONTEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -173,8 +170,8 @@ pipeline {
                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
                 docker tag \
-                  ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                  ${BACKEND_IMAGE}:latest
+                ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                ${BACKEND_IMAGE}:latest
 
                 docker push ${BACKEND_IMAGE}:latest
                 '''
@@ -189,8 +186,8 @@ pipeline {
                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
                 docker tag \
-                  ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                  ${FRONTEND_IMAGE}:latest
+                ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                ${FRONTEND_IMAGE}:latest
 
                 docker push ${FRONTEND_IMAGE}:latest
                 '''
@@ -205,8 +202,7 @@ pipeline {
                 kubectl set image deployment/rag-chatbot \
                 rag-chatbot=${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                kubectl rollout status \
-                deployment/rag-chatbot \
+                kubectl rollout status deployment/rag-chatbot \
                 --timeout=300s
                 '''
             }
@@ -220,8 +216,7 @@ pipeline {
                 kubectl set image deployment/rag-chatbot-frontend \
                 rag-chatbot-frontend=${FRONTEND_IMAGE}:${IMAGE_TAG}
 
-                kubectl rollout status \
-                deployment/rag-chatbot-frontend \
+                kubectl rollout status deployment/rag-chatbot-frontend \
                 --timeout=300s
                 '''
             }
@@ -256,48 +251,52 @@ pipeline {
         success {
 
             emailext(
-                mimeType: 'text/html',
                 to: "${EMAIL_RECIPIENT}",
-                subject: "SUCCESS - RAG Chatbot Pipeline #${BUILD_NUMBER}",
+                subject: "SUCCESS - ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-                <h2 style="color:green;">Build Successful</h2>
+Build Successful
 
-                <p><b>Job:</b> ${JOB_NAME}</p>
-                <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
-                <p><b>Status:</b> SUCCESS</p>
+Job Name      : ${JOB_NAME}
+Build Number  : ${BUILD_NUMBER}
+Status        : SUCCESS
 
-                <p><b>Backend Image:</b> ${BACKEND_IMAGE}:${IMAGE_TAG}</p>
-                <p><b>Frontend Image:</b> ${FRONTEND_IMAGE}:${IMAGE_TAG}</p>
+Backend Image :
+${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                <p>
-                    <a href="${BUILD_URL}">
-                    Open Build Details
-                    </a>
-                </p>
-                """
+Frontend Image:
+${FRONTEND_IMAGE}:${IMAGE_TAG}
+
+Build URL:
+${BUILD_URL}
+
+Regards,
+Jenkins
+"""
             )
 
-            echo 'Backend and Frontend deployed successfully'
+            echo 'Backend and Frontend deployment successful'
         }
 
         failure {
 
             emailext(
-                mimeType: 'text/html',
                 to: "${EMAIL_RECIPIENT}",
-                subject: "FAILED - RAG Chatbot Pipeline #${BUILD_NUMBER}",
+                subject: "FAILED - ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-                <h2 style="color:red;">Build Failed</h2>
+Build Failed
 
-                <p><b>Job:</b> ${JOB_NAME           <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
-                <p><b>Status:</b> FAILED</p>
+Job Name      : ${JOB_NAME}
+Build Number  : ${BUILD_NUMBER}
+Status        : FAILED
 
-                <p>
-                    ${BUILD_URL}
-                    Review Build Logs
-                    </a>
-                </p>
-                """
+Build URL:
+${BUILD_URL}
+
+Please review Jenkins console logs.
+
+Regards,
+Jenkins
+"""
             )
 
             echo 'Pipeline failed'
