@@ -13,6 +13,8 @@ pipeline {
 
         TRIVY_TEMP_DIR = "/var/lib/jenkins/trivy-temp"
 
+        EMAIL_RECIPIENT = "babu.joseph5757@gmail.com"
+
         PATH = "/var/lib/jenkins/.local/bin:${env.PATH}"
     }
 
@@ -32,6 +34,9 @@ pipeline {
         stage('Checkout Source') {
 
             steps {
+
+                echo "Checking out source code..."
+
                 checkout scm
             }
         }
@@ -59,9 +64,9 @@ pipeline {
                     python3 -m pip install --upgrade pip
 
                     python3 -m pip install \
-                    --user \
-                    --no-cache-dir \
-                    -r requirements.txt
+                        --user \
+                        --no-cache-dir \
+                        -r requirements.txt
                     '''
                 }
             }
@@ -72,11 +77,7 @@ pipeline {
             steps {
 
                 sh '''
-                if [ -d tests ]; then
-                    python3 -m pytest tests/ -v
-                else
-                    echo "No tests found. Skipping..."
-                fi
+                python3 -m pytest tests/ -v
                 '''
             }
         }
@@ -87,8 +88,8 @@ pipeline {
 
                 sh '''
                 docker build \
-                -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                ./backend
+                  -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                  ./backend
                 '''
             }
         }
@@ -99,8 +100,8 @@ pipeline {
 
                 sh '''
                 docker build \
-                -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                ./frontend
+                  -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                  ./frontend
                 '''
             }
         }
@@ -115,12 +116,12 @@ pipeline {
                 export TMPDIR=${TRIVY_TEMP_DIR}
 
                 trivy image \
-                --timeout 30m \
-                --skip-version-check \
-                --scanners vuln \
-                --severity HIGH,CRITICAL \
-                --exit-code 0 \
-                ${BACKEND_IMAGE}:${IMAGE_TAG}
+                  --timeout 30m \
+                  --skip-version-check \
+                  --scanners vuln \
+                  --severity HIGH,CRITICAL \
+                  --exit-code 0 \
+                  ${BACKEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -133,12 +134,12 @@ pipeline {
                 export TMPDIR=${TRIVY_TEMP_DIR}
 
                 trivy image \
-                --timeout 15m \
-                --skip-version-check \
-                --scanners vuln \
-                --severity HIGH,CRITICAL \
-                --exit-code 0 \
-                ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                  --timeout 15m \
+                  --skip-version-check \
+                  --scanners vuln \
+                  --severity HIGH,CRITICAL \
+                  --exit-code 0 \
+                  ${FRONTEND_IMAGE}:${IMAGE_TAG}
                 '''
             }
         }
@@ -172,8 +173,8 @@ pipeline {
                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
                 docker tag \
-                ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                ${BACKEND_IMAGE}:latest
+                  ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                  ${BACKEND_IMAGE}:latest
 
                 docker push ${BACKEND_IMAGE}:latest
                 '''
@@ -188,8 +189,8 @@ pipeline {
                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
                 docker tag \
-                ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                ${FRONTEND_IMAGE}:latest
+                  ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                  ${FRONTEND_IMAGE}:latest
 
                 docker push ${FRONTEND_IMAGE}:latest
                 '''
@@ -204,7 +205,8 @@ pipeline {
                 kubectl set image deployment/rag-chatbot \
                 rag-chatbot=${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                kubectl rollout status deployment/rag-chatbot \
+                kubectl rollout status \
+                deployment/rag-chatbot \
                 --timeout=300s
                 '''
             }
@@ -218,7 +220,8 @@ pipeline {
                 kubectl set image deployment/rag-chatbot-frontend \
                 rag-chatbot-frontend=${FRONTEND_IMAGE}:${IMAGE_TAG}
 
-                kubectl rollout status deployment/rag-chatbot-frontend \
+                kubectl rollout status \
+                deployment/rag-chatbot-frontend \
                 --timeout=300s
                 '''
             }
@@ -252,12 +255,52 @@ pipeline {
 
         success {
 
-            echo '✅ Backend and Frontend deployment successful'
+            emailext(
+                mimeType: 'text/html',
+                to: "${EMAIL_RECIPIENT}",
+                subject: "SUCCESS - RAG Chatbot Pipeline #${BUILD_NUMBER}",
+                body: """
+                <h2 style="color:green;">Build Successful</h2>
+
+                <p><b>Job:</b> ${JOB_NAME}</p>
+                <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
+                <p><b>Status:</b> SUCCESS</p>
+
+                <p><b>Backend Image:</b> ${BACKEND_IMAGE}:${IMAGE_TAG}</p>
+                <p><b>Frontend Image:</b> ${FRONTEND_IMAGE}:${IMAGE_TAG}</p>
+
+                <p>
+                    <a href="${BUILD_URL}">
+                    Open Build Details
+                    </a>
+                </p>
+                """
+            )
+
+            echo 'Backend and Frontend deployed successfully'
         }
 
         failure {
 
-            echo '❌ Pipeline failed'
+            emailext(
+                mimeType: 'text/html',
+                to: "${EMAIL_RECIPIENT}",
+                subject: "FAILED - RAG Chatbot Pipeline #${BUILD_NUMBER}",
+                body: """
+                <h2 style="color:red;">Build Failed</h2>
+
+                <p><b>Job:</b> ${JOB_NAME           <p><b>Build Number:</b> ${BUILD_NUMBER}</p>
+                <p><b>Status:</b> FAILED</p>
+
+                <p>
+                    ${BUILD_URL}
+                    Review Build Logs
+                    </a>
+                </p>
+                """
+            )
+
+            echo 'Pipeline failed'
         }
 
         always {

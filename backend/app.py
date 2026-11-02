@@ -9,11 +9,10 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST
 )
 
-import time
 import logging
+import time
 
-from backend.rag_pipeline import get_answer
-
+from rag_pipeline import get_answer
 
 # ====================================
 # Logging
@@ -26,16 +25,14 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-
 # ====================================
-# FastAPI App
+# FastAPI
 # ====================================
 
 app = FastAPI(
     title="RAG Chatbot API",
     version="1.0"
 )
-
 
 # ====================================
 # Prometheus Metrics
@@ -56,7 +53,6 @@ RAG_LATENCY = Histogram(
     "RAG response latency"
 )
 
-
 # ====================================
 # Request Model
 # ====================================
@@ -64,18 +60,15 @@ RAG_LATENCY = Histogram(
 class QuestionRequest(BaseModel):
     question: str
 
-
 # ====================================
 # Root Endpoint
 # ====================================
 
 @app.get("/")
 def root():
-
     return {
         "message": "RAG Chatbot API Running"
     }
-
 
 # ====================================
 # Health Endpoint
@@ -83,13 +76,11 @@ def root():
 
 @app.get("/health")
 def health():
-
     return {
         "status": "healthy",
         "service": "rag-chatbot",
         "llm": "llama3"
     }
-
 
 # ====================================
 # Metrics Endpoint
@@ -97,12 +88,10 @@ def health():
 
 @app.get("/metrics")
 def metrics():
-
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST
     )
-
 
 # ====================================
 # Ask Endpoint
