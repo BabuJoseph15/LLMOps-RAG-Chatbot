@@ -12,10 +12,17 @@ from prometheus_client import (
 import logging
 import time
 
-from rag_pipeline import get_answer
+# ====================================
+# Support both Jenkins pytest and Docker
+# ====================================
+
+try:
+    from backend.rag_pipeline import get_answer
+except ImportError:
+    from rag_pipeline import get_answer
 
 # ====================================
-# Logging
+# Logging Configuration
 # ====================================
 
 logging.basicConfig(
@@ -26,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ====================================
-# FastAPI
+# FastAPI App
 # ====================================
 
 app = FastAPI(
@@ -114,7 +121,9 @@ def ask_question(request: QuestionRequest):
             request.question
         )
 
-        latency = time.time() - start_time
+        latency = (
+            time.time() - start_time
+        )
 
         RAG_LATENCY.observe(
             latency
