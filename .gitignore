@@ -1,8 +1,6 @@
 # Virtual Environment
 venv/
 
-# Vector Database
-chroma_db/
 
 # Python
 __pycache__/
