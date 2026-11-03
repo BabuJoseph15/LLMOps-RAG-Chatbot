@@ -2,16 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies first (better Docker caching)
-COPY requirements.txt .
+COPY backend/requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy entire backend directory
-COPY . .
+COPY backend/ .
 
-# Verify chroma_db exists during build
-RUN ls -R /app/chroma_db
+COPY chroma_db ./chroma_db
 
 EXPOSE 8000
 

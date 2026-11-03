@@ -50,23 +50,17 @@ pipeline {
             }
         }
 
-        stage('Run Unit Tests') {
-
-            steps {
-
-                echo "Skipping host-based tests. Validation happens through Docker builds."
-
-            }
-        }
-
         stage('Build Backend Image') {
 
             steps {
 
+                echo "Building Backend Image..."
+
                 sh '''
                 docker build \
+                -f backend/Dockerfile \
                 -t ${BACKEND_IMAGE}:${IMAGE_TAG} \
-                ./backend
+                .
                 '''
             }
         }
@@ -75,10 +69,13 @@ pipeline {
 
             steps {
 
+                echo "Building Frontend Image..."
+
                 sh '''
                 docker build \
+                -f frontend/Dockerfile \
                 -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
-                ./frontend
+                .
                 '''
             }
         }
@@ -215,6 +212,12 @@ pipeline {
 
                 echo "===== Services ====="
                 kubectl get svc
+
+                echo "===== Backend Image ====="
+                kubectl describe deployment rag-chatbot | grep Image
+
+                echo "===== Frontend Image ====="
+                kubectl describe deployment rag-chatbot-frontend | grep Image
                 '''
             }
         }
@@ -233,8 +236,11 @@ Build Successful
 Job Name      : ${JOB_NAME}
 Build Number  : ${BUILD_NUMBER}
 
-Backend Image : ${BACKEND_IMAGE}:${IMAGE_TAG}
-Frontend Image: ${FRONTEND_IMAGE}:${IMAGE_TAG}
+Backend Image :
+${BACKEND_IMAGE}:${IMAGE_TAG}
+
+Frontend Image:
+${FRONTEND_IMAGE}:${IMAGE_TAG}
 
 Build URL:
 ${BUILD_URL}
@@ -244,7 +250,7 @@ Jenkins
 """
             )
 
-            echo 'Backend and Frontend deployment successful'
+            echo "Backend and Frontend deployment successful"
         }
 
         failure {
@@ -268,7 +274,7 @@ Jenkins
 """
             )
 
-            echo 'Pipeline failed'
+            echo "Pipeline failed"
         }
 
         always {
