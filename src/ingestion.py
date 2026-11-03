@@ -9,7 +9,7 @@ from langchain_chroma import Chroma
 
 
 DATA_DIR = "data"
-CHROMA_DIR = "chroma_db"
+CHROMA_DIR = "backend/chroma_db"
 
 
 def load_and_index_all_pdfs():
