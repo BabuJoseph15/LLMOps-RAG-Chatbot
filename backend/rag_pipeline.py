@@ -9,7 +9,7 @@ embedding_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# Ollama LLM
+# Ollama Connection
 llm = OllamaLLM(
     model="llama3",
     base_url="http://host.minikube.internal:11434"
@@ -24,11 +24,38 @@ def get_answer(question: str):
         embedding_function=embedding_model
     )
 
-    # Retrieve Documents
-    docs = db.similarity_search(
+    # Better retrieval using MMR
+    docs = db.max_marginal_relevance_search(
         question,
-        k=3
+        k=6,
+        fetch_k=20
     )
+
+    # Remove noise
+    filtered_docs = []
+
+    for doc in docs:
+
+        content = doc.page_content.strip()
+
+        if not content:
+            continue
+
+        lower_content = content.lower()
+
+        # Skip cover pages and contents
+        if "contents" in lower_content:
+            continue
+
+        if (
+            "chapter" in lower_content
+            and len(content) < 150
+        ):
+            continue
+
+        filtered_docs.append(doc)
+
+    docs = filtered_docs[:5]
 
     if not docs:
 
@@ -37,18 +64,18 @@ def get_answer(question: str):
             "sources": []
         }
 
-    # Create Context
+    # Build Context
     context = "\n\n".join(
         [doc.page_content for doc in docs]
     )
 
     prompt = f"""
-You are a helpful AI Assistant.
+You are an expert AI assistant.
 
 Answer ONLY using the provided context.
 
 If the answer is not available in the context,
-respond with:
+respond:
 
 "I could not find the answer in the provided documents."
 
@@ -61,21 +88,18 @@ Question:
 Answer:
 """
 
-    # Generate Response
     answer = llm.invoke(prompt)
 
     sources = []
 
     for doc in docs:
 
-        if doc.metadata:
+        source = doc.metadata.get(
+            "source",
+            "unknown"
+        )
 
-            source = doc.metadata.get(
-                "source",
-                "unknown"
-            )
-
-            sources.append(source)
+        sources.append(source)
 
     return {
         "answer": answer,
