@@ -34,11 +34,11 @@ def get_answer(question: str):
         embedding_function=embedding_model
     )
 
-    # Better retrieval using MMR
+    # Retrieve fewer but higher quality chunks
     docs = db.max_marginal_relevance_search(
         question,
-        k=10,
-        fetch_k=50
+        k=3,
+        fetch_k=10
     )
 
     if not docs:
@@ -47,19 +47,27 @@ def get_answer(question: str):
             "sources": []
         }
 
-    # Build context
+    # Limit context size
     context = "\n\n".join(
-        [doc.page_content for doc in docs]
+        [doc.page_content[:500] for doc in docs]
     )
 
-    # Prompt
-    prompt = f"""
-You are a Kubernetes, Docker and Cloud Computing expert.
+    # Debug output
+    print("=" * 80)
+    print("RETRIEVED CONTEXT")
+    print("=" * 80)
 
-Use ONLY the supplied context to answer.
+    for doc in docs:
+        print(doc.page_content[:1000])
+        print("-" * 80)
+
+    prompt = f"""
+You are a helpful AI assistant.
+
+Answer ONLY using the supplied context.
 
 If the answer exists in the context,
-provide a clear and detailed answer.
+provide a clear and concise answer.
 
 If the answer is not available,
 respond exactly with:
@@ -75,10 +83,8 @@ Question:
 Answer:
 """
 
-    # Generate answer
     answer = llm.invoke(prompt)
 
-    # Extract sources
     sources = []
 
     for doc in docs:
@@ -88,9 +94,10 @@ Answer:
             "unknown"
         )
 
-        sources.append(source)
+        if source not in sources:
+            sources.append(source)
 
     return {
         "answer": answer,
-        "sources": list(set(sources))
+        "sources": sources
     }
