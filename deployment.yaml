@@ -23,7 +23,7 @@ spec:
 
       - name: rag-chatbot
 
-        image: babujoseph5757/rag-chatbot:30
+        image: babujoseph5757/rag-chatbot:latest
 
         imagePullPolicy: Always
 
@@ -90,7 +90,7 @@ spec:
 
       - name: rag-chatbot-frontend
 
-        image: babujoseph5757/rag-chatbot-frontend:30
+        image: babujoseph5757/rag-chatbot-frontend:latest
 
         imagePullPolicy: Always
 
