@@ -13,7 +13,7 @@ embedding_model = HuggingFaceEmbeddings(
 )
 
 # ==================================================
-# Ollama Model
+# Ollama LLM
 # ==================================================
 
 llm = OllamaLLM(
@@ -27,17 +27,18 @@ llm = OllamaLLM(
 
 def get_answer(question: str):
 
+    # Connect to ChromaDB
     db = Chroma(
         collection_name="langchain",
         persist_directory=CHROMA_PATH,
         embedding_function=embedding_model
     )
 
-    # Better retrieval
+    # Better retrieval using MMR
     docs = db.max_marginal_relevance_search(
         question,
-        k=6,
-        fetch_k=20
+        k=10,
+        fetch_k=50
     )
 
     if not docs:
@@ -46,23 +47,24 @@ def get_answer(question: str):
             "sources": []
         }
 
-    # Build context directly from retrieved chunks
+    # Build context
     context = "\n\n".join(
         [doc.page_content for doc in docs]
     )
 
+    # Prompt
     prompt = f"""
-You are a helpful AI assistant.
+You are a Kubernetes, Docker and Cloud Computing expert.
 
-Use ONLY the supplied context.
+Use ONLY the supplied context to answer.
 
 If the answer exists in the context,
-answer the question clearly.
+provide a clear and detailed answer.
 
 If the answer is not available,
-respond:
+respond exactly with:
 
-I could not find the answer in the provided documents.
+"I could not find the answer in the provided documents."
 
 Context:
 {context}
@@ -73,8 +75,10 @@ Question:
 Answer:
 """
 
+    # Generate answer
     answer = llm.invoke(prompt)
 
+    # Extract sources
     sources = []
 
     for doc in docs:
