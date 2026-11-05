@@ -16,45 +16,57 @@ pipeline {
         EMAIL_RECIPIENT = "babu.joseph5757@gmail.com"
     }
 
-    options {
-
-        timestamps()
-
-        buildDiscarder(
-            logRotator(
-                numToKeepStr: '10'
-            )
-        )
-    }
-
     stages {
 
         stage('Checkout Source') {
 
             steps {
-
-                echo "Checking out source code..."
-
                 checkout scm
             }
         }
 
-        stage('Verify Workspace') {
+        stage('SonarQube Analysis') {
 
             steps {
 
-                sh '''
-                pwd
-                ls -ltr
-                '''
+                withSonarQubeEnv('sonarqube-server') {
+
+                    withCredentials([
+                        string(
+                            credentialsId: 'rag-sonar-token',
+                            variable: 'SONAR_TOKEN'
+                        )
+                    ]) {
+
+                        sh '''
+                        sonar-scanner \
+                        -Dsonar.projectKey=rag-chatbot \
+                        -Dsonar.projectName="LLMOps RAG Chatbot" \
+                        -Dsonar.host.url=$SONAR_HOST_URL \
+                        -Dsonar.token=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+
+            steps {
+
+                timeout(
+                    time: 10,
+                    unit: 'MINUTES'
+                ) {
+
+                    waitForQualityGate abortPipeline: false
+                }
             }
         }
 
         stage('Build Backend Image') {
 
             steps {
-
-                echo "Building Backend Image..."
 
                 sh '''
                 docker build \
@@ -68,8 +80,6 @@ pipeline {
         stage('Build Frontend Image') {
 
             steps {
-
-                echo "Building Frontend Image..."
 
                 sh '''
                 docker build \
@@ -105,8 +115,6 @@ pipeline {
             steps {
 
                 sh '''
-                export TMPDIR=${TRIVY_TEMP_DIR}
-
                 trivy image \
                 --timeout 15m \
                 --skip-version-check \
@@ -146,8 +154,7 @@ pipeline {
                 sh '''
                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                docker tag \
-                ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} \
                 ${BACKEND_IMAGE}:latest
 
                 docker push ${BACKEND_IMAGE}:latest
@@ -162,8 +169,7 @@ pipeline {
                 sh '''
                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
-                docker tag \
-                ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} \
                 ${FRONTEND_IMAGE}:latest
 
                 docker push ${FRONTEND_IMAGE}:latest
@@ -198,29 +204,6 @@ pipeline {
                 '''
             }
         }
-
-        stage('Verify Deployment') {
-
-            steps {
-
-                sh '''
-                echo "===== Deployments ====="
-                kubectl get deployment
-
-                echo "===== Pods ====="
-                kubectl get pods
-
-                echo "===== Services ====="
-                kubectl get svc
-
-                echo "===== Backend Image ====="
-                kubectl describe deployment rag-chatbot | grep Image
-
-                echo "===== Frontend Image ====="
-                kubectl describe deployment rag-chatbot-frontend | grep Image
-                '''
-            }
-        }
     }
 
     post {
@@ -231,26 +214,20 @@ pipeline {
                 to: "${EMAIL_RECIPIENT}",
                 subject: "SUCCESS - ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-Build Successful
+RAG Chatbot Deployment Successful
 
-Job Name      : ${JOB_NAME}
-Build Number  : ${BUILD_NUMBER}
+Build Number: ${BUILD_NUMBER}
 
-Backend Image :
+Backend:
 ${BACKEND_IMAGE}:${IMAGE_TAG}
 
-Frontend Image:
+Frontend:
 ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
 Build URL:
 ${BUILD_URL}
-
-Regards,
-Jenkins
 """
             )
-
-            echo "Backend and Frontend deployment successful"
         }
 
         failure {
@@ -259,36 +236,22 @@ Jenkins
                 to: "${EMAIL_RECIPIENT}",
                 subject: "FAILED - ${JOB_NAME} #${BUILD_NUMBER}",
                 body: """
-Build Failed
-
-Job Name      : ${JOB_NAME}
-Build Number  : ${BUILD_NUMBER}
+RAG Chatbot Deployment Failed
 
 Build URL:
 ${BUILD_URL}
-
-Please review Jenkins logs.
-
-Regards,
-Jenkins
 """
             )
-
-            echo "Pipeline failed"
         }
 
         always {
 
             sh '''
-            rm -rf ~/.cache/pip || true
-
-            rm -rf ${TRIVY_TEMP_DIR}/* || true
-
-            docker container prune -f || true
+            docker builder prune -f || true
 
             docker image prune -f || true
 
-            docker builder prune -f || true
+            docker container prune -f || true
             '''
 
             cleanWs()
