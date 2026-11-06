@@ -17,7 +17,7 @@ embedding_model = HuggingFaceEmbeddings(
 # ==================================================
 
 llm = OllamaLLM(
-    model="llama3",
+        model="llama3.2:3b",
     base_url="http://host.minikube.internal:11434"
 )
 
