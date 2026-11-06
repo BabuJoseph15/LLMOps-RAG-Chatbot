@@ -16,6 +16,17 @@ pipeline {
         EMAIL_RECIPIENT = "babu.joseph5757@gmail.com"
     }
 
+    options {
+
+        timestamps()
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '10'
+            )
+        )
+    }
+
     stages {
 
         stage('Checkout Source') {
@@ -25,26 +36,42 @@ pipeline {
             }
         }
 
+        stage('Verify Workspace') {
+
+            steps {
+
+                sh '''
+                pwd
+                ls -ltr
+                '''
+            }
+        }
+
         stage('SonarQube Analysis') {
 
             steps {
 
-                withSonarQubeEnv('sonarqube-server') {
+                script {
 
-                    withCredentials([
-                        string(
-                            credentialsId: 'rag-sonar-token',
-                            variable: 'SONAR_TOKEN'
-                        )
-                    ]) {
+                    def scannerHome = tool 'sonar-scanner'
 
-                        sh '''
-                        sonar-scanner \
-                        -Dsonar.projectKey=rag-chatbot \
-                        -Dsonar.projectName="LLMOps RAG Chatbot" \
-                        -Dsonar.host.url=$SONAR_HOST_URL \
-                        -Dsonar.token=$SONAR_TOKEN
-                        '''
+                    withSonarQubeEnv('sonarqube-server') {
+
+                        withCredentials([
+                            string(
+                                credentialsId: 'rag-sonar-token',
+                                variable: 'SONAR_TOKEN'
+                            )
+                        ]) {
+
+                            sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=rag-chatbot \
+                            -Dsonar.projectName='LLMOps RAG Chatbot' \
+                            -Dsonar.host.url=$SONAR_HOST_URL \
+                            -Dsonar.token=$SONAR_TOKEN
+                            """
+                        }
                     }
                 }
             }
@@ -59,7 +86,9 @@ pipeline {
                     unit: 'MINUTES'
                 ) {
 
-                    waitForQualityGate abortPipeline: false
+                    waitForQualityGate(
+                        abortPipeline: false
+                    )
                 }
             }
         }
@@ -115,6 +144,8 @@ pipeline {
             steps {
 
                 sh '''
+                export TMPDIR=${TRIVY_TEMP_DIR}
+
                 trivy image \
                 --timeout 15m \
                 --skip-version-check \
@@ -154,7 +185,8 @@ pipeline {
                 sh '''
                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
 
-                docker tag ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                docker tag \
+                ${BACKEND_IMAGE}:${IMAGE_TAG} \
                 ${BACKEND_IMAGE}:latest
 
                 docker push ${BACKEND_IMAGE}:latest
@@ -169,7 +201,8 @@ pipeline {
                 sh '''
                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
-                docker tag ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                docker tag \
+                ${FRONTEND_IMAGE}:${IMAGE_TAG} \
                 ${FRONTEND_IMAGE}:latest
 
                 docker push ${FRONTEND_IMAGE}:latest
@@ -204,6 +237,20 @@ pipeline {
                 '''
             }
         }
+
+        stage('Verify Deployment') {
+
+            steps {
+
+                sh '''
+                kubectl get deployment
+
+                kubectl get pods
+
+                kubectl get svc
+                '''
+            }
+        }
     }
 
     post {
@@ -216,16 +263,20 @@ pipeline {
                 body: """
 RAG Chatbot Deployment Successful
 
+Job Name    : ${JOB_NAME}
 Build Number: ${BUILD_NUMBER}
 
-Backend:
+Backend Image:
 ${BACKEND_IMAGE}:${IMAGE_TAG}
 
-Frontend:
+Frontend Image:
 ${FRONTEND_IMAGE}:${IMAGE_TAG}
 
 Build URL:
 ${BUILD_URL}
+
+Regards,
+Jenkins
 """
             )
         }
@@ -238,8 +289,16 @@ ${BUILD_URL}
                 body: """
 RAG Chatbot Deployment Failed
 
+Job Name    : ${JOB_NAME}
+Build Number: ${BUILD_NUMBER}
+
 Build URL:
 ${BUILD_URL}
+
+Please review Jenkins logs.
+
+Regards,
+Jenkins
 """
             )
         }
@@ -247,11 +306,13 @@ ${BUILD_URL}
         always {
 
             sh '''
-            docker builder prune -f || true
+            rm -rf ${TRIVY_TEMP_DIR}/* || true
+
+            docker container prune -f || true
 
             docker image prune -f || true
 
-            docker container prune -f || true
+            docker builder prune -f || true
             '''
 
             cleanWs()
