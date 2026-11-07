@@ -59,7 +59,7 @@ pipeline {
 
                         sh """
                         ${scannerHome}/bin/sonar-scanner -X \
-                        -Dsonar.projectKey=rag-chatbot \
+                        -Dsonar.projectKey=LLMOps-RAG-Chatbot \
                         -Dsonar.projectName='LLMOps RAG Chatbot'
                         """
                     }
