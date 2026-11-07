@@ -57,21 +57,11 @@ pipeline {
 
                     withSonarQubeEnv('sonarqube-server') {
 
-                        withCredentials([
-                            string(
-                                credentialsId: 'rag-sonar-token',
-                                variable: 'SONAR_TOKEN'
-                            )
-                        ]) {
-
-                            sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=rag-chatbot \
-                            -Dsonar.projectName='LLMOps RAG Chatbot' \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.token=$SONAR_TOKEN
-                            """
-                        }
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner -X \
+                        -Dsonar.projectKey=rag-chatbot \
+                        -Dsonar.projectName='LLMOps RAG Chatbot'
+                        """
                     }
                 }
             }
@@ -263,10 +253,10 @@ pipeline {
                 body: """
 RAG Chatbot Deployment Successful
 
-Job Name    : ${JOB_NAME}
-Build Number: ${BUILD_NUMBER}
+Job Name      : ${JOB_NAME}
+Build Number  : ${BUILD_NUMBER}
 
-Backend Image:
+Backend Image :
 ${BACKEND_IMAGE}:${IMAGE_TAG}
 
 Frontend Image:
@@ -289,8 +279,8 @@ Jenkins
                 body: """
 RAG Chatbot Deployment Failed
 
-Job Name    : ${JOB_NAME}
-Build Number: ${BUILD_NUMBER}
+Job Name      : ${JOB_NAME}
+Build Number  : ${BUILD_NUMBER}
 
 Build URL:
 ${BUILD_URL}
