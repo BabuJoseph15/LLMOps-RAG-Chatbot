@@ -209,7 +209,7 @@ pipeline {
                 rag-chatbot=${BACKEND_IMAGE}:${IMAGE_TAG}
 
                 kubectl rollout status deployment/rag-chatbot \
-                --timeout=300s
+                --timeout=900s
                 '''
             }
         }
